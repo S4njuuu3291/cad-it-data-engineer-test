@@ -1,0 +1,6 @@
+.env
+secrets/*.txt
+certs/*.key
+certs/*.crt
+__pycache__/
+.venv/

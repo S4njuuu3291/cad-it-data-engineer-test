@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    pull_policy: never
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    ports:
+      - "127.0.0.1:5432:5432"
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/server.crt:/certs/server.crt:ro
+      - ./certs/server.key:/certs/server.key:ro
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        mkdir -p /tmp/postgres-certs
+        cp /certs/server.crt /certs/server.key /certs/ca.crt /tmp/postgres-certs/
+        chown -R postgres:postgres /tmp/postgres-certs
+        chmod 700 /tmp/postgres-certs
+        chmod 600 /tmp/postgres-certs/server.key
+        exec docker-entrypoint.sh "$$@"
+      - --
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/tmp/postgres-certs/server.crt
+      - -c
+      - ssl_key_file=/tmp/postgres-certs/server.key
+      - -c
+      - ssl_ca_file=/tmp/postgres-certs/ca.crt
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE:?Set POSTGRES_PASSWORD_FILE in .env}
+
+volumes:
+  postgres_data:
